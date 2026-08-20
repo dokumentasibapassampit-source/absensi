@@ -2,215 +2,83 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Sistem Presensi Wajah</title>
-  <!-- Memuat face-api dan model langsung dari CDN jsDelivr -->
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <title>Sistem Presensi Sederhana</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
-    .nav { margin-bottom: 15px; }
-    button { padding: 10px 20px; margin: 5px; cursor: pointer; font-weight: bold; border-radius: 5px; border: 1px solid #ccc; }
-    button.active { background-color: #007bff; color: white; border-color: #007bff; }
-    #container { position: relative; width: 400px; height: 300px; margin: 0 auto; background: #222; border-radius: 8px; overflow: hidden; }
-    video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-    .form-group { margin-top: 15px; }
-    input { padding: 8px; width: 200px; border-radius: 4px; border: 1px solid #ccc; }
-    #status { margin-top: 15px; font-weight: bold; color: #333; }
+    body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 40px; }
+    .card { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 10px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
+    select, button { width: 100%; padding: 12px; margin-top: 15px; font-size: 16px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; }
+    button { background-color: #28a745; color: white; font-weight: bold; border: none; }
+    button:hover { background-color: #218838; }
+    #status { margin-top: 20px; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <h2>Sistem Presensi Wajah</h2>
+  <div class="card">
+    <h2>Absensi Kehadiran</h2>
+    <p>Pilih nama Anda lalu klik tombol Absen</p>
+    
+    <select id="namaSelect">
+      <option value="">-- Memuat Daftar Nama --</option>
+    </select>
 
-  <div class="nav">
-    <button id="btnAbsen" class="active" onclick="switchMode('absen')">Menu Absensi</button>
-    <button id="btnRekam" onclick="switchMode('rekam')">Menu Rekam Wajah</button>
+    <button onclick="kirimAbsen()">Kirim Absen Sekarang</button>
+    <div id="status"></div>
   </div>
-
-  <div id="container">
-    <video id="video" autoplay muted playsinline></video>
-  </div>
-
-  <div id="formRekam" class="form-group" style="display:none;">
-    <input type="text" id="namaInput" placeholder="Masukkan Nama Lengkap">
-    <button id="btnDaftar" onclick="prosesRekamWajah()" style="background:#28a745; color:white;">Daftarkan Wajah</button>
-  </div>
-
-  <div id="status">Memulai sistem...</div>
 
   <script>
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp7OuP3Q4OtMMXR9Y1BjPLBeyFgIy5Pa5TFm0agCFVWdMiebxBD6UCVO6sCDBUbA4PYQ/exec";
 
-    const video = document.getElementById('video');
-    const statusDiv = document.getElementById('status');
-    let currentMode = 'absen';
-    let isProcessing = false;
-    let faceMatcher = null;
-    let aiReady = false;
-
-    // Menggunakan CDN alternatif models dari github raw yang lebih longgar
-    const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
-
-    async function init() {
-      try {
-        statusDiv.innerText = "Mengakses kamera...";
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        video.srcObject = stream;
-
-        statusDiv.innerText = "Memuat AI... Mohon tunggu sebentar.";
-        
-        // Memuat model secara paralel agar cepat
-        await Promise.all([
-          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-
-        aiReady = true;
-        statusDiv.innerText = "Sistem Siap!";
-        await muatDatabaseWajah();
-      } catch (err) {
-        statusDiv.innerText = "Gagal memuat AI. Coba gunakan tethering HP.";
-        console.error(err);
-      }
-    }
-
-    async function muatDatabaseWajah() {
+    // Ambil daftar nama otomatis dari Google Sheets saat halaman dibuka
+    async function muatDaftarNama() {
       try {
         const response = await fetch(APPS_SCRIPT_URL + "?action=getDatabase");
         const data = await response.json();
-
+        const select = document.getElementById('namaSelect');
+        select.innerHTML = '<option value="">-- Pilih Nama Anda --</option>';
+        
         if (data && data.length > 0) {
-          const labeledDescriptors = data.map(item => {
-            const desc = new Float32Array(item.descriptor);
-            return new faceapi.LabeledFaceDescriptors(item.nama, [desc]);
+          data.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.nama;
+            opt.innerText = item.nama;
+            select.appendChild(opt);
           });
-          faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
-          statusDiv.innerText = "Sistem Siap! Silakan hadap kamera.";
         } else {
-          statusDiv.innerText = "Database kosong. Silakan rekam wajah.";
+          select.innerHTML = '<option value="">Belum ada nama terdaftar</option>';
         }
       } catch (err) {
-        statusDiv.innerText = "Siap merekam wajah baru.";
+        document.getElementById('status').innerText = "Gagal memuat daftar nama.";
       }
     }
 
-    function switchMode(mode) {
-      currentMode = mode;
-      document.getElementById('btnAbsen').className = mode === 'absen' ? 'active' : '';
-      document.getElementById('btnRekam').className = mode === 'rekam' ? 'active' : '';
-      document.getElementById('formRekam').style.display = mode === 'rekam' ? 'block' : 'none';
-      statusDiv.innerText = mode === 'absen' ? "Mode Absensi Aktif" : "Masukkan nama lalu klik Daftarkan Wajah";
-    }
+    async function kirimAbsen() {
+      const nama = document.getElementById('namaSelect').value;
+      const statusDiv = document.getElementById('status');
 
-    function kirimDataViaForm(params, callback) {
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = APPS_SCRIPT_URL;
-      form.target = 'hidden_iframe';
-
-      for (const key in params) {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = key;
-        input.value = params[key];
-        form.appendChild(input);
-      }
-
-      let iframe = document.getElementById('hidden_iframe');
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'hidden_iframe';
-        iframe.name = 'hidden_iframe';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-
-      document.body.appendChild(form);
-      form.submit();
-      document.body.removeChild(form);
-
-      setTimeout(callback, 2000);
-    }
-
-    video.addEventListener('play', () => {
-      const container = document.getElementById('container');
-      const existingCanvas = container.querySelector('canvas');
-      if (existingCanvas) existingCanvas.remove();
-
-      const canvas = faceapi.createCanvasFromMedia(video);
-      container.append(canvas);
-      
-      const displaySize = { width: 400, height: 300 };
-      faceapi.matchDimensions(canvas, displaySize);
-
-      setInterval(async () => {
-        if (isProcessing || !faceMatcher || currentMode !== 'absen' || !aiReady) return;
-
-        try {
-          const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-          canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-
-          if (detections.length > 0) {
-            const resizedDetections = faceapi.resizeResults(detections, displaySize);
-            
-            for (const detection of resizedDetections) {
-              const result = faceMatcher.findBestMatch(detection.descriptor);
-              
-              if (result.label !== 'unknown' && !isProcessing) {
-                isProcessing = true;
-                statusDiv.innerText = "Absen Berhasil: " + result.label;
-
-                kirimDataViaForm({ action: 'catatAbsensi', nama: result.label }, () => {
-                  setTimeout(() => { isProcessing = false; }, 4000);
-                });
-              }
-            }
-          }
-        } catch(e) {}
-      }, 1000);
-    });
-
-    async function prosesRekamWajah() {
-      const namaInput = document.getElementById('namaInput');
-      const btnDaftar = document.getElementById('btnDaftar');
-      const nama = namaInput.value.trim();
-      
       if (!nama) {
-        alert("Isi nama dulu!");
+        alert("Silakan pilih nama Anda terlebih dahulu!");
         return;
       }
 
-      if (!aiReady) {
-        alert("Tunggu sebentar, AI sedang dimuat.");
-        return;
-      }
-
-      btnDaftar.disabled = true;
-      statusDiv.innerText = "Merekam wajah...";
+      statusDiv.innerText = "Mengirim data...";
 
       try {
-        const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: new URLSearchParams({ action: 'catatAbsensi', nama: nama })
+        });
 
-        if (detection) {
-          const descriptorArray = JSON.stringify(Array.from(detection.descriptor));
-          
-          kirimDataViaForm({ action: 'simpanWajah', nama: nama, descriptor: descriptorArray }, () => {
-            alert("Wajah " + nama + " Berhasil Didaftarkan!");
-            namaInput.value = '';
-            btnDaftar.disabled = false;
-            muatDatabaseWajah();
-          });
-        } else {
-          alert("Wajah tidak terdeteksi, posisikan wajah dengan jelas.");
-          btnDaftar.disabled = false;
-        }
+        statusDiv.style.color = "green";
+        statusDiv.innerText = "✅ Absensi Berhasil Tercatat untuk: " + nama;
       } catch (err) {
-        alert("Error: " + err.message);
-        btnDaftar.disabled = false;
+        statusDiv.style.color = "red";
+        statusDiv.innerText = "Gagal mengirim absen.";
       }
     }
 
-    window.onload = init;
+    window.onload = muatDaftarNama;
   </script>
 </body>
 </html>
