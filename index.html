@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Sistem Presensi Wajah</title>
-  <!-- Library Face-API via jsDelivr CDN -->
+  <!-- Library Face-API via CDN jsDelivr -->
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
@@ -38,7 +38,6 @@
   <div id="status">Memulai sistem...</div>
 
   <script>
-    // URL Google Apps Script yang sudah diperbarui
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp7OuP3Q4OtMMXR9Y1BjPLBeyFgIy5Pa5TFm0agCFVWdMiebxBD6UCVO6sCDBUbA4PYQ/exec";
 
     const video = document.getElementById('video');
@@ -48,13 +47,13 @@
     let faceMatcher = null;
     let aiReady = false;
 
-    // Model AI via CDN jsDelivr bebas pemblokiran
-    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+    // Menggunakan CDN unpkg yang aman dari pemblokiran ISP lokal untuk model weights
+    const MODEL_URL = 'https://unpkg.com/face-api.js@0.22.2/weights';
 
     async function init() {
       try {
         if (typeof faceapi === 'undefined') {
-          throw new Error("Library faceapi tidak terbaca. Periksa koneksi internet Anda.");
+          throw new Error("Library faceapi gagal dimuat.");
         }
 
         statusDiv.innerText = "Mengakses kamera...";
@@ -70,7 +69,8 @@
         statusDiv.innerText = "Model AI Berhasil Dimuat!";
         await muatDatabaseWajah();
       } catch (err) {
-        statusDiv.innerText = "⚠️ Gagal: " + err.message;
+        statusDiv.innerText = "⚠️ Gagal memuat AI: " + err.message;
+        console.error(err);
       }
     }
 
@@ -183,7 +183,7 @@
       }
 
       if (!aiReady) {
-        alert("Model AI belum selesai dimuat. Tunggu hingga status menunjukkan 'Database kosong' atau 'Sistem Siap'.");
+        alert("Model AI masih diunduh. Mohon tunggu beberapa detik hingga status di bawah layar berubah menjadi 'Database kosong' atau 'Sistem Siap'.");
         return;
       }
 
@@ -204,7 +204,7 @@
             muatDatabaseWajah();
           });
         } else {
-          alert("Wajah tidak terdeteksi! Pastikan posisi wajah terlihat jelas dan cahaya cukup.");
+          alert("Wajah tidak terdeteksi! Pastikan pencahayaan cukup dan wajah menghadap kamera.");
           statusDiv.innerText = "Silakan coba lagi.";
           btnDaftar.disabled = false;
         }
