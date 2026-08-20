@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>Sistem Presensi Wajah</title>
+  <!-- Library Face-API via jsDelivr CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
     .nav { margin-bottom: 15px; }
@@ -36,6 +38,7 @@
   <div id="status">Memulai sistem...</div>
 
   <script>
+    // URL Google Apps Script yang sudah diperbarui
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp7OuP3Q4OtMMXR9Y1BjPLBeyFgIy5Pa5TFm0agCFVWdMiebxBD6UCVO6sCDBUbA4PYQ/exec";
 
     const video = document.getElementById('video');
@@ -45,54 +48,29 @@
     let faceMatcher = null;
     let aiReady = false;
 
-    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-
-    function loadScript(url) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = url;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-
-    async function loadFaceApi() {
-      const cdns = [
-        'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/dist/face-api.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/face-api.js/0.22.2/face-api.min.js',
-        'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
-      ];
-      for (const url of cdns) {
-        try {
-          await loadScript(url);
-          if (typeof faceapi !== 'undefined') return true;
-        } catch (e) {}
-      }
-      return false;
-    }
+    // Model AI via CDN jsDelivr bebas pemblokiran
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
 
     async function init() {
       try {
-        statusDiv.innerText = "Mengunduh library AI pengenal wajah...";
-        const loaded = await loadFaceApi();
-        if (!loaded || typeof faceapi === 'undefined') {
-          throw new Error("Gagal mengunduh AI. Coba ganti koneksi internet ke tethering HP.");
+        if (typeof faceapi === 'undefined') {
+          throw new Error("Library faceapi tidak terbaca. Periksa koneksi internet Anda.");
         }
 
         statusDiv.innerText = "Mengakses kamera...";
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = stream;
 
-        statusDiv.innerText = "Memuat model AI pengenal wajah...";
+        statusDiv.innerText = "Mengunduh model AI (Mohon tunggu)...";
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
 
         aiReady = true;
+        statusDiv.innerText = "Model AI Berhasil Dimuat!";
         await muatDatabaseWajah();
       } catch (err) {
-        statusDiv.innerText = "⚠️ " + err.message;
+        statusDiv.innerText = "⚠️ Gagal: " + err.message;
       }
     }
 
@@ -204,8 +182,8 @@
         return;
       }
 
-      if (!aiReady || typeof faceapi === 'undefined') {
-        alert("Sistem AI belum selesai dimuat.");
+      if (!aiReady) {
+        alert("Model AI belum selesai dimuat. Tunggu hingga status menunjukkan 'Database kosong' atau 'Sistem Siap'.");
         return;
       }
 
@@ -226,7 +204,7 @@
             muatDatabaseWajah();
           });
         } else {
-          alert("Wajah tidak terdeteksi! Pastikan pencahayaan terang.");
+          alert("Wajah tidak terdeteksi! Pastikan posisi wajah terlihat jelas dan cahaya cukup.");
           statusDiv.innerText = "Silakan coba lagi.";
           btnDaftar.disabled = false;
         }
