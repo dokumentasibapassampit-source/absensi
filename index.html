@@ -34,10 +34,10 @@
     <button id="btnDaftar" onclick="prosesRekamWajah()" style="background:#28a745; color:white;">Daftarkan Wajah</button>
   </div>
 
-  <div id="status">Memulai aplikasi...</div>
+  <div id="status">Memulai kamera...</div>
 
   <script>
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbycSUUOO8bbX3pzSxlFdMoAXnUtwq1eqUAORXvgRCrq9Ox-YqTAjY_5hPdYx_TjqBzd3Q/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwp7OuP3Q4OtMMXR9Y1BjPLBeyFgIy5Pa5TFm0agCFVWdMiebxBD6UCVO6sCDBUbA4PYQ/exec";
 
     const video = document.getElementById('video');
     const statusDiv = document.getElementById('status');
@@ -49,7 +49,6 @@
 
     async function init() {
       try {
-        statusDiv.innerText = "Membuka kamera...";
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = stream;
 
@@ -60,7 +59,7 @@
 
         await muatDatabaseWajah();
       } catch (err) {
-        statusDiv.innerText = "Terjadi kesalahan: " + err.message;
+        statusDiv.innerText = "Gagal memuat: " + err.message;
       }
     }
 
@@ -78,10 +77,10 @@
           faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
           statusDiv.innerText = "Sistem Siap! Silakan hadap kamera untuk absen.";
         } else {
-          statusDiv.innerText = "Database masih kosong. Silakan daftarkan wajah terlebih dahulu.";
+          statusDiv.innerText = "Database kosong. Silakan rekam wajah dulu.";
         }
       } catch (err) {
-        statusDiv.innerText = "Database belum ada data atau gagal dimuat.";
+        statusDiv.innerText = "Gagal memuat database.";
       }
     }
 
@@ -91,6 +90,36 @@
       document.getElementById('btnRekam').className = mode === 'rekam' ? 'active' : '';
       document.getElementById('formRekam').style.display = mode === 'rekam' ? 'block' : 'none';
       statusDiv.innerText = mode === 'absen' ? "Mode Absensi Aktif" : "Masukkan nama lalu klik Daftarkan Wajah";
+    }
+
+    function kirimDataViaForm(params, callback) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = APPS_SCRIPT_URL;
+      form.target = 'hidden_iframe';
+
+      for (const key in params) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = params[key];
+        form.appendChild(input);
+      }
+
+      let iframe = document.getElementById('hidden_iframe');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'hidden_iframe';
+        iframe.name = 'hidden_iframe';
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+      }
+
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+
+      setTimeout(callback, 1500);
     }
 
     video.addEventListener('play', () => {
@@ -118,19 +147,11 @@
             
             if (result.label !== 'unknown' && !isProcessing) {
               isProcessing = true;
-              statusDiv.innerText = "Wajah Terdeteksi: " + result.label + "! Mencatat kehadiran...";
+              statusDiv.innerText = "Wajah Terdeteksi: " + result.label + "! Mencatat...";
 
-              fetch(APPS_SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "catatAbsensi", nama: result.label })
-              }).then(() => {
+              kirimDataViaForm({ action: 'catatAbsensi', nama: result.label }, () => {
                 statusDiv.innerText = "✅ Absensi BERHASIL untuk: " + result.label;
                 setTimeout(() => { isProcessing = false; }, 4000);
-              }).catch(() => {
-                statusDiv.innerText = "Gagal mengirim data absensi.";
-                isProcessing = false;
               });
             }
           }
@@ -144,34 +165,26 @@
       const nama = namaInput.value.trim();
       
       if (!nama) {
-        alert("Harap isi nama terlebih dahulu!");
+        alert("Harap isi nama!");
         return;
       }
 
       btnDaftar.disabled = true;
-      statusDiv.innerText = "Merekam fitur wajah " + nama + "... Mohon tunggu...";
+      statusDiv.innerText = "Merekam wajah...";
 
       const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
 
       if (detection) {
-        const descriptorArray = Array.from(detection.descriptor);
+        const descriptorArray = JSON.stringify(Array.from(detection.descriptor));
         
-        fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "simpanWajah", nama: nama, descriptor: descriptorArray })
-        }).then(() => {
+        kirimDataViaForm({ action: 'simpanWajah', nama: nama, descriptor: descriptorArray }, () => {
           alert("✅ Wajah " + nama + " BERHASIL didaftarkan!");
           namaInput.value = '';
           btnDaftar.disabled = false;
           muatDatabaseWajah();
-        }).catch(err => {
-          alert("Gagal menyimpan data!");
-          btnDaftar.disabled = false;
         });
       } else {
-        alert("Wajah tidak terdeteksi! Pastikan pencahayaan terang dan hadap lurus ke kamera.");
+        alert("Wajah tidak terdeteksi! Pastikan pencahayaan terang.");
         statusDiv.innerText = "Silakan coba lagi.";
         btnDaftar.disabled = false;
       }
