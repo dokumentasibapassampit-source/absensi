@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Sistem Presensi Wajah</title>
-  <!-- Library Face-API via CDN jsDelivr -->
+  <!-- Memuat face-api dan model langsung dari CDN jsDelivr -->
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
@@ -47,36 +47,35 @@
     let faceMatcher = null;
     let aiReady = false;
 
-    // Menggunakan CDN unpkg yang aman dari pemblokiran ISP lokal untuk model weights
-    const MODEL_URL = 'https://unpkg.com/face-api.js@0.22.2/weights';
+    // Menggunakan CDN alternatif models dari github raw yang lebih longgar
+    const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
     async function init() {
       try {
-        if (typeof faceapi === 'undefined') {
-          throw new Error("Library faceapi gagal dimuat.");
-        }
-
         statusDiv.innerText = "Mengakses kamera...";
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = stream;
 
-        statusDiv.innerText = "Mengunduh model AI (Mohon tunggu)...";
-        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        statusDiv.innerText = "Memuat AI... Mohon tunggu sebentar.";
+        
+        // Memuat model secara paralel agar cepat
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark64Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
 
         aiReady = true;
-        statusDiv.innerText = "Model AI Berhasil Dimuat!";
+        statusDiv.innerText = "Sistem Siap!";
         await muatDatabaseWajah();
       } catch (err) {
-        statusDiv.innerText = "⚠️ Gagal memuat AI: " + err.message;
+        statusDiv.innerText = "Gagal memuat AI. Coba gunakan tethering HP.";
         console.error(err);
       }
     }
 
     async function muatDatabaseWajah() {
       try {
-        statusDiv.innerText = "Mengambil database dari Google Sheets...";
         const response = await fetch(APPS_SCRIPT_URL + "?action=getDatabase");
         const data = await response.json();
 
@@ -86,12 +85,12 @@
             return new faceapi.LabeledFaceDescriptors(item.nama, [desc]);
           });
           faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
-          statusDiv.innerText = "Sistem Siap! Silakan hadap kamera untuk absen.";
+          statusDiv.innerText = "Sistem Siap! Silakan hadap kamera.";
         } else {
-          statusDiv.innerText = "Database kosong. Silakan rekam wajah terlebih dahulu.";
+          statusDiv.innerText = "Database kosong. Silakan rekam wajah.";
         }
       } catch (err) {
-        statusDiv.innerText = "Database belum terisi. Siap merekam wajah baru.";
+        statusDiv.innerText = "Siap merekam wajah baru.";
       }
     }
 
@@ -159,10 +158,9 @@
               
               if (result.label !== 'unknown' && !isProcessing) {
                 isProcessing = true;
-                statusDiv.innerText = "Wajah Terdeteksi: " + result.label + "! Mencatat...";
+                statusDiv.innerText = "Absen Berhasil: " + result.label;
 
                 kirimDataViaForm({ action: 'catatAbsensi', nama: result.label }, () => {
-                  statusDiv.innerText = "✅ Absensi BERHASIL untuk: " + result.label;
                   setTimeout(() => { isProcessing = false; }, 4000);
                 });
               }
@@ -178,17 +176,17 @@
       const nama = namaInput.value.trim();
       
       if (!nama) {
-        alert("Harap isi nama terlebih dahulu!");
+        alert("Isi nama dulu!");
         return;
       }
 
       if (!aiReady) {
-        alert("Model AI masih diunduh. Mohon tunggu beberapa detik hingga status di bawah layar berubah menjadi 'Database kosong' atau 'Sistem Siap'.");
+        alert("Tunggu sebentar, AI sedang dimuat.");
         return;
       }
 
       btnDaftar.disabled = true;
-      statusDiv.innerText = "Merekam fitur wajah...";
+      statusDiv.innerText = "Merekam wajah...";
 
       try {
         const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
@@ -197,20 +195,17 @@
           const descriptorArray = JSON.stringify(Array.from(detection.descriptor));
           
           kirimDataViaForm({ action: 'simpanWajah', nama: nama, descriptor: descriptorArray }, () => {
-            alert("✅ Wajah " + nama + " BERHASIL didaftarkan!");
+            alert("Wajah " + nama + " Berhasil Didaftarkan!");
             namaInput.value = '';
             btnDaftar.disabled = false;
-            statusDiv.innerText = "Pendaftaran sukses!";
             muatDatabaseWajah();
           });
         } else {
-          alert("Wajah tidak terdeteksi! Pastikan pencahayaan cukup dan wajah menghadap kamera.");
-          statusDiv.innerText = "Silakan coba lagi.";
+          alert("Wajah tidak terdeteksi, posisikan wajah dengan jelas.");
           btnDaftar.disabled = false;
         }
       } catch (err) {
-        alert("Terjadi kesalahan: " + err.message);
-        statusDiv.innerText = "Error: " + err.message;
+        alert("Error: " + err.message);
         btnDaftar.disabled = false;
       }
     }
